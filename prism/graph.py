@@ -16,9 +16,9 @@ W3 全图：
 
 from __future__ import annotations
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from prism.memory import build_checkpointer
 from prism.nodes.abort import no_evidence_node, route_after_aggregator
 from prism.nodes.aggregator import aggregator_node
 from prism.nodes.human import human_review_node, revise_node, route_after_human
@@ -28,8 +28,8 @@ from prism.nodes.reviewer import reviewer_node, route_after_reviewer
 from prism.nodes.writer import writer_node
 from prism.state import PrismState
 
-# 内存版 checkpointer：支持 HITL interrupt/恢复（W4 可换 SQLite 持久化）
-checkpointer = MemorySaver()
+# checkpointer：SQLite 持久化（缺包时降级 MemorySaver），支持 HITL 中断恢复
+checkpointer = build_checkpointer()
 
 
 def build_graph():

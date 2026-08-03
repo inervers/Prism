@@ -17,6 +17,7 @@ from langgraph.types import Command
 
 from prism.config import ROOT_DIR
 from prism.graph import app
+from prism.memory import write_memory
 
 OUTPUT_DIR = ROOT_DIR / "outputs"
 
@@ -89,6 +90,17 @@ def run(topic: str, verbose: bool = False, no_human: bool = False) -> str:
     # 取最终状态
     state = app.get_state(config).values
     report = state.get("report", "")
+
+    # 任务完成：沉淀长期记忆（结论摘要 + 引用来源），供后续任务复用
+    if report and state.get("grouped_evidence"):
+        sources = [
+            ev.get("source", "")
+            for evs in state["grouped_evidence"].values()
+            for ev in evs
+        ]
+        write_memory(topic, report[:300], sources)
+        if verbose:
+            print(f"[Memory] 已沉淀记忆（引用来源 {len(set(sources))} 条）")
 
     if verbose:
         print(f"[Total] {time.time() - t0:.1f}s")

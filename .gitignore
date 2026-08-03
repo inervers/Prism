@@ -5,7 +5,10 @@
 
 # 输出产物
 outputs/
-eval/reports/*.md
+eval/reports/
+
+# 本地数据库（运行时生成）
+data/*.db*.md
 
 # Python
 __pycache__/

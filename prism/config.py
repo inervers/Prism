@@ -23,6 +23,9 @@ class Settings:
     local_kb_path: str = _get(
         "LOCAL_KB_PATH", str(ROOT_DIR / "data" / "industry_kb.json")
     )
+    memory_db_path: str = _get(
+        "MEMORY_DB_PATH", str(ROOT_DIR / "data" / "prism_memory.db")
+    )
 
     # 研究参数
     max_subquestions: int = int(_get("MAX_SUBQUESTIONS", "5"))

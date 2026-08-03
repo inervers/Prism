@@ -11,6 +11,7 @@ import time
 
 from prism.config import settings
 from prism.llm import build_llm
+from prism.memory import recall_memory
 from prism.state import PrismState, SubQuestion
 
 PLANNER_PROMPT = """你是研究规划专家。把用户的研究主题拆解为 {max_n} 个相互独立、覆盖全面的子问题。
@@ -24,12 +25,32 @@ PLANNER_PROMPT = """你是研究规划专家。把用户的研究主题拆解为
 {{"subquestions": [{{"id": "q1", "question": "子问题文本", "rationale": "理由"}}]}}"""
 
 
+def _recall_context(topic: str) -> str:
+    """检索与主题相关的历史记忆，拼成提示上下文（无相关记忆时返回空串）。"""
+    memories = recall_memory(topic)
+    if not memories:
+        return ""
+    lines = ["\n\n=== 历史记忆（来自之前的研究任务，供参考） ==="]
+    for m in memories:
+        sources = m.get("sources", "")
+        lines.append(f"- 主题《{m['topic']}》：{m['summary']}")
+        if sources:
+            lines.append(f"  引用来源：{sources}")
+    lines.append(
+        "以上历史记忆如果与当前主题相关，设计子问题时可以参考其结论，"
+        "避免重复研究相同内容；不相关则忽略。\n"
+    )
+    return "\n".join(lines)
+
+
 def planner_node(state: PrismState) -> dict:
     topic = state.get("topic", "")
     t0 = time.time()
     llm = build_llm(temperature=0.2)
     prompt = PLANNER_PROMPT.format(max_n=settings.max_subquestions)
-    resp = llm.invoke(prompt + f"\n\n研究主题：{topic}")
+    prompt += f"\n\n研究主题：{topic}"
+    prompt += _recall_context(topic)  # 注入历史记忆
+    resp = llm.invoke(prompt)
     elapsed = time.time() - t0
 
     subquestions: list[SubQuestion] = []
