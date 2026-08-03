@@ -5,7 +5,7 @@
 
 # 输出产物
 outputs/
-eval/reports/
+eval/reports/*.md
 
 # Python
 __pycache__/
