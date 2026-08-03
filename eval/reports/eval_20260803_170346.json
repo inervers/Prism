@@ -1,0 +1,42 @@
+{
+  "num_tasks": 1,
+  "completion_rate": 1.0,
+  "review_pass_rate": 1.0,
+  "avg_tool_hit_rate": 1.0,
+  "avg_dedup_rate": 0.2,
+  "avg_evidence_raw": 15.0,
+  "avg_evidence_deduped": 12.0,
+  "avg_subquestions": 5.0,
+  "avg_rewrite_count": 0.0,
+  "avg_total_tokens": 26304,
+  "avg_total_time_s": 169.7,
+  "avg_report_len": 5453,
+  "per_task": [
+    {
+      "task_id": "task-001",
+      "topic": "虚拟电厂商业模式分析",
+      "completed": true,
+      "report_len": 5453,
+      "subquestions": 5,
+      "evidence_raw": 15,
+      "evidence_deduped": 12,
+      "subs_with_evidence": 5,
+      "search_attempts": 5,
+      "search_hits": 5,
+      "tool_hit_rate": 1.0,
+      "dedup_rate": 0.2,
+      "review_approved": true,
+      "rewrite_count": 0,
+      "review_issues": [],
+      "citation_count": 12,
+      "total_tokens": 26304,
+      "node_times": {
+        "planner": 7.4,
+        "researcher": 28.0,
+        "writer": 30.7,
+        "reviewer": 125.5
+      },
+      "total_time_s": 169.7
+    }
+  ]
+}

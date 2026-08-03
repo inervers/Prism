@@ -1,0 +1,80 @@
+{
+  "num_tasks": 2,
+  "completion_rate": 1.0,
+  "review_pass_rate": 1.0,
+  "avg_tool_hit_rate": 1.0,
+  "avg_dedup_rate": 0.233,
+  "avg_evidence_raw": 15.0,
+  "avg_evidence_deduped": 11.5,
+  "avg_subquestions": 5.0,
+  "avg_rewrite_count": 2.0,
+  "avg_total_tokens": 55905,
+  "avg_total_time_s": 474.25,
+  "avg_report_len": 6070,
+  "per_task": [
+    {
+      "task_id": "task-001",
+      "topic": "虚拟电厂商业模式分析",
+      "completed": true,
+      "report_len": 4526,
+      "subquestions": 5,
+      "evidence_raw": 15,
+      "evidence_deduped": 10,
+      "subs_with_evidence": 5,
+      "search_attempts": 5,
+      "search_hits": 5,
+      "tool_hit_rate": 1.0,
+      "dedup_rate": 0.333,
+      "review_approved": true,
+      "rewrite_count": 2,
+      "review_issues": [
+        "第一章（一）论断'虚拟电厂参与方主要包括电网公司、虚拟电厂运营商、电力交易中心及各类电力用户'引自[q1-1]，但引用来源列表未标明该证据条目对应哪篇文章，无法验证证据中是否包含该具体主体列举。",
+        "第一章（二）论断'虚拟电厂成为2026年能源投资新风口'及'三大驱动力'引自[q1-3]和[q1-1]，但引用来源列表未给出编号与证据条目的明确对应关系，无法核实具体数字'2026'及驱动力表述是否在证据中真实存在。",
+        "第一章（三）'AI用电激增导致电网紧张'及'各大厂商除自建电厂外，储能和虚拟电厂等多举措并行'引自[q1-2]，但引用来源中未标明[q1-2]对应哪一篇文章，无法验证该论断是否有证据支持。",
+        "第二章'虚拟电厂概念起源于1997年《虚拟公共设施：新兴产业的描述、技术与竞争力》'引自[q2-1]，但引用来源列表中未见该书名或1997年文献，具体书名和年份疑似为证据中完全没有的幻觉。",
+        "第二章'湖南省发改委发布的《湖南省电力现货市场交易实施细则（试运行3.0版）（征求意见稿）》'引自[q2-2]，但引用来源列表中未包含该文件名，具体政策名称疑似为证据外内容。",
+        "第四章引用[q4-1]和[q4-2]，但引用来源列表含两篇相似标题文章，未标明编号对应关系，无法确认海外差距、2021年分布式虚拟电厂概念等论断分别对应哪条证据。",
+        "第五章基于[q5-1]的整章分析仅重复证据标题与业务领域，未提供虚拟电厂优势或潜在问题的具体论述，而综合结论第五点声称'虚拟电厂与企业用电计划制定、新能源电站筹建融资等密切相关'系对证据信息的部分转述，证据中确实仅含标题信息，该结论部分超出证据可支撑范围。",
+        "已重写 2 次达到上限，强制通过"
+      ],
+      "citation_count": 10,
+      "total_tokens": 56471,
+      "node_times": {
+        "planner": 7.2,
+        "researcher": 30.000000000000004,
+        "writer": 255.70000000000002,
+        "reviewer": 260.3
+      },
+      "total_time_s": 530.3
+    },
+    {
+      "task_id": "task-002",
+      "topic": "大语言模型 Agent 工具调用的可靠性问题与缓解方案",
+      "completed": true,
+      "report_len": 7614,
+      "subquestions": 5,
+      "evidence_raw": 15,
+      "evidence_deduped": 13,
+      "subs_with_evidence": 5,
+      "search_attempts": 5,
+      "search_hits": 5,
+      "tool_hit_rate": 1.0,
+      "dedup_rate": 0.133,
+      "review_approved": true,
+      "rewrite_count": 2,
+      "review_issues": [
+        "引言和综合结论两个章节没有使用 [子问题-序号] 引用标注，导致引用不完整。",
+        "已重写 2 次达到上限，强制通过"
+      ],
+      "citation_count": 13,
+      "total_tokens": 55339,
+      "node_times": {
+        "planner": 8.5,
+        "researcher": 31.0,
+        "writer": 271.5,
+        "reviewer": 131.2
+      },
+      "total_time_s": 418.2
+    }
+  ]
+}

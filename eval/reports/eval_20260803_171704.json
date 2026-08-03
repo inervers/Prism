@@ -1,0 +1,68 @@
+{
+  "num_tasks": 2,
+  "completion_rate": 1.0,
+  "review_pass_rate": 1.0,
+  "avg_tool_hit_rate": 1.0,
+  "avg_dedup_rate": 0.034,
+  "avg_evidence_raw": 15.0,
+  "avg_evidence_deduped": 14.5,
+  "avg_subquestions": 5.0,
+  "avg_rewrite_count": 0.0,
+  "avg_total_tokens": 34284,
+  "avg_total_time_s": 190.75,
+  "avg_report_len": 7351,
+  "per_task": [
+    {
+      "task_id": "task-001",
+      "topic": "虚拟电厂商业模式分析",
+      "completed": true,
+      "report_len": 6225,
+      "subquestions": 5,
+      "evidence_raw": 15,
+      "evidence_deduped": 14,
+      "subs_with_evidence": 5,
+      "search_attempts": 5,
+      "search_hits": 5,
+      "tool_hit_rate": 1.0,
+      "dedup_rate": 0.067,
+      "review_approved": true,
+      "rewrite_count": 0,
+      "review_issues": [],
+      "citation_count": 14,
+      "total_tokens": 30980,
+      "node_times": {
+        "planner": 6.2,
+        "researcher": 29.4,
+        "writer": 38.6,
+        "reviewer": 135.6
+      },
+      "total_time_s": 187.0
+    },
+    {
+      "task_id": "task-002",
+      "topic": "大语言模型 Agent 工具调用的可靠性问题与缓解方案",
+      "completed": true,
+      "report_len": 8477,
+      "subquestions": 5,
+      "evidence_raw": 15,
+      "evidence_deduped": 15,
+      "subs_with_evidence": 5,
+      "search_attempts": 5,
+      "search_hits": 5,
+      "tool_hit_rate": 1.0,
+      "dedup_rate": 0.0,
+      "review_approved": true,
+      "rewrite_count": 0,
+      "review_issues": [],
+      "citation_count": 15,
+      "total_tokens": 37587,
+      "node_times": {
+        "planner": 7.9,
+        "researcher": 33.6,
+        "writer": 147.4,
+        "reviewer": 31.6
+      },
+      "total_time_s": 194.5
+    }
+  ]
+}
