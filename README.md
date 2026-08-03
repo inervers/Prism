@@ -51,8 +51,30 @@ prism/
 ├── config.py        # 配置（.env）
 ├── llm.py           # DeepSeek 客户端封装
 ├── state.py         # LangGraph State 定义（含评测轨迹 trace）
-├── graph.py         # StateGraph 编排
-├── nodes/           # planner / researcher / aggregator / writer
+├── graph.py         # StateGraph 编排（含 HITL/评审/短路）
+├── nodes/           # planner / researcher / aggregator / writer / reviewer / human / abort
 ├── tools/           # SearchTool 抽象 + dummy/duckduckgo 实现
-└── main.py          # CLI 入口
+└── main.py          # CLI 入口（stream 实时进度 + HITL）
+
+eval/
+├── tasks.json       # 评测任务集（6 个真实主题）
+├── metrics.py       # 指标计算（完成/工具/质量/成本四层）
+└── run_eval.py      # 评测执行器 → JSON 数据 + Markdown 报告
 ```
+
+## Agent 评测
+
+```bash
+python -m eval.run_eval --max-tasks 2     # 先跑小批量验证
+python -m eval.run_eval                    # 全量（约 6 任务 × 2-3 分钟）
+python -m eval.run_eval --task task-001    # 单任务
+```
+
+指标分四层：
+- **L1 完成**：完成率、报告长度、证据数
+- **L2 工具**：搜索命中率、去重率
+- **L3 质量**：评审通过率、重写次数、引用有效数
+- **L4 成本**：token 消耗、节点耗时
+
+每次评测生成 `eval/reports/eval_时间戳.json`（原始数据）+ `.md`（报告），
+JSON 可作回归基线：改架构后重跑，对比指标判断是改进还是回退。

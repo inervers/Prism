@@ -44,4 +44,7 @@ class PrismState(TypedDict, total=False):
     rewrite_count: int                    # 已重写次数（防死循环）
     review_issues: list[str]             # Reviewer 发现的问题
     review_approved: bool                # Reviewer 是否通过
-    human_feedback: str                  # HITL 人工意见（空=直接通过）（追加合并）
+    human_feedback: str                  # HITL 人工意见（空=直接通过）
+    # W3.1 定向重写字段
+    chapters_cache: dict[str, str]       # 子问题 id → 已生成章节（重写时复用）
+    rewrite_targets: list[str]           # 本轮需要重写的子问题 id（reviewer 标注）（追加合并）

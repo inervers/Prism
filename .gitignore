@@ -5,6 +5,7 @@
 
 # 输出产物
 outputs/
+eval/reports/
 
 # Python
 __pycache__/

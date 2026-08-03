@@ -34,7 +34,11 @@ def _brief(node: str, update: dict) -> str:
         grouped = update.get("grouped_evidence", {})
         return f"归组 {sum(len(v) for v in grouped.values())} 条证据 / {len(grouped)} 个子问题"
     if node == "writer":
-        return f"生成报告 {len(update.get('report', ''))} 字符"
+        detail = update.get("trace", [{}])[0].get("detail", "")
+        import re as _re
+        m = _re.search(r"rewrote=(\d+) kept=(\d+)", detail)
+        suffix = f"（重写{m.group(1)}章，复用{m.group(2)}章）" if m else ""
+        return f"生成报告 {len(update.get('report', ''))} 字符{suffix}"
     if node == "reviewer":
         ok = update.get("review_approved")
         issues = update.get("review_issues", [])

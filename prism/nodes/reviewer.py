@@ -27,15 +27,28 @@ REVIEWER_PROMPT = """你是研究报告质量审查员。审查报告是否存�
 4. 逻辑连贯：章节间是否有明显断裂或矛盾
 
 只输出 JSON，格式严格如下（不要任何其他文字）：
-{{"approved": true/false, "issues": ["问题1描述", "问题2描述"]}}
+{{"approved": true/false, "issues": ["[q3] 问题描述", ...]}}
 
+要求：
 - approved=true 表示全部通过
-- issues 列出所有发现的问题；若通过则为空数组。问题描述要具体，指出哪个章节、哪个论断、缺什么证据。"""
+- issues 列出所有发现的问题；每条必须以 [qn] 开头标注问题所在的子问题章节（如 [q1] 或 [q3]）
+- 若问题是全局性的（如整个报告无引用），用 [global] 标注
+- 问题描述要具体，指出哪个章节、哪个论断、缺什么证据"""
 
 
 def _extract_cited_ids(report: str) -> set[str]:
     """从报告中提取所有 [x-N] 引用编号。"""
     return set(re.findall(r"\[([a-zA-Z]+\d+-\d+)\]", report))
+
+
+def _extract_targets(issues: list[str]) -> list[str]:
+    """从问题列表中提取需要重写的子问题 id。"""
+    targets: set[str] = set()
+    for issue in issues:
+        m = re.match(r"\[([a-zA-Z]+\d+)\]", issue)
+        if m and m.group(1) != "global":
+            targets.add(m.group(1))
+    return sorted(targets)
 
 
 def reviewer_node(state: PrismState) -> dict:
@@ -56,18 +69,22 @@ def reviewer_node(state: PrismState) -> dict:
     invalid = cited - valid_ids
     if invalid:
         issues.append(
-            f"引用编号无效或超出证据范围: {sorted(invalid)}（有效编号: {sorted(valid_ids)}）"
+            f"[global] 引用编号无效或超出证据范围: {sorted(invalid)}（有效编号: {sorted(valid_ids)}）"
         )
 
     # 没有引用任何证据的章节？粗略检查：报告是否完全无引用
     if not cited:
-        issues.append("报告没有任何 [子问题-序号] 引用标注")
+        issues.append("[global] 报告没有任何 [子问题-序号] 引用标注")
 
     # LLM 幻觉检查（花 token 的部分）
+    llm_tokens = 0
     if not issues:  # 程序化检查已失败时跳过 LLM，直接打回
         llm = build_llm(temperature=0.0)
         resp = llm.invoke(
             REVIEWER_PROMPT + f"\n\n证据条目数：{len(valid_ids)}\n\n报告内容：\n{report}"
+        )
+        llm_tokens = (
+            resp.usage_metadata.get("total_tokens", 0) if resp.usage_metadata else 0
         )
         try:
             text = resp.content
@@ -82,17 +99,19 @@ def reviewer_node(state: PrismState) -> dict:
 
     approved = len(issues) == 0
     rewrites = state.get("rewrite_count", 0)
+    targets = _extract_targets(issues)
 
     # 达到重写上限时强制通过，避免死循环
     forced = False
     if not approved and rewrites >= MAX_REWRITES:
         forced = True
         approved = True
-        issues.append(f"已重写 {rewrites} 次达到上限，强制通过")
+        issues.append(f"[global] 已重写 {rewrites} 次达到上限，强制通过")
 
     return {
         "review_issues": issues,
         "review_approved": approved,
+        "rewrite_targets": targets,
         "rewrite_count": rewrites + 1 if not approved and not forced else rewrites,
         "trace": [
             {
@@ -103,7 +122,7 @@ def reviewer_node(state: PrismState) -> dict:
                     + (" FORCED" if forced else "")
                     + f" time={time.time() - t0:.1f}s"
                 ),
-                "tokens": 0,
+                "tokens": llm_tokens,
             }
         ],
     }
