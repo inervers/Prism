@@ -6,6 +6,7 @@
 from prism.tools.search import (  # noqa: F401
     DummySearch,
     DuckDuckGoSearch,
+    LocalSearchTool,
     SearchResult,
     SearchTool,
     build_search_tool,

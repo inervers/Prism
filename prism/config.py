@@ -20,6 +20,9 @@ class Settings:
     model: str = _get("LLM_MODEL", "deepseek-v4-flash")
     search_backend: str = _get("SEARCH_BACKEND", "dummy")
     search_proxy: str = _get("SEARCH_PROXY", "")  # 如 http://127.0.0.1:7897
+    local_kb_path: str = _get(
+        "LOCAL_KB_PATH", str(ROOT_DIR / "data" / "industry_kb.json")
+    )
 
     # 研究参数
     max_subquestions: int = int(_get("MAX_SUBQUESTIONS", "5"))

@@ -54,7 +54,7 @@ prism/
 ├── state.py         # LangGraph State 定义（含评测轨迹 trace）
 ├── graph.py         # StateGraph 编排（含 HITL/评审/短路）
 ├── nodes/           # planner / researcher / aggregator / writer / reviewer / human / abort
-├── tools/           # SearchTool 抽象 + dummy/duckduckgo 实现
+├── tools/           # SearchTool 抽象 + dummy/duckduckgo/local 实现
 └── main.py          # CLI 入口（stream 实时进度 + HITL）
 
 eval/

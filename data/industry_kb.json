@@ -1,0 +1,16 @@
+[
+  {
+    "id": "demo-001",
+    "title": "示例：外贸客户官网 - 产品线介绍",
+    "content": "这是一条示例数据，展示外贸方向如何灌入客户官网信息。真实使用时：爬取目标客户的官网产品页、公司介绍页，清洗正文后按此格式灌入，content 填网页正文，source 填页面 URL。",
+    "source": "https://example.com/customer-1",
+    "tags": ["外贸", "客户", "示例"]
+  },
+  {
+    "id": "demo-002",
+    "title": "示例：招聘岗位记录 - AI Agent 应用开发实习",
+    "content": "这是一条示例数据，展示招聘方向如何灌入岗位记录。真实使用时：spider-nexus 爬取 BOSS 直聘岗位，title 填岗位名，content 填 JD 要点（职责/要求/薪资），tags 填技能与城市（如 LangGraph、RAG、北京）。",
+    "source": "https://example.com/job-1",
+    "tags": ["招聘", "AI Agent", "示例"]
+  }
+]

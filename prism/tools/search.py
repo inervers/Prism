@@ -1,16 +1,23 @@
-"""搜索工具实现：Dummy（离线）与 DuckDuckGo（真实，免费无需 key）。
+"""搜索工具实现：Dummy（离线）、DuckDuckGo（真实搜索）与 Local（本地行业知识库）。
 
 W1 默认 dummy：让骨架不依赖网络即可跑通，验证编排逻辑。
-DuckDuckGo 实现作为真实搜索的后备，W2 可替换为 spider-nexus 爬虫。
+DuckDuckGo 实现作为真实搜索的后备。
+Local 是行业接入的第 0 步：把爬虫/整理好的行业数据（客户官网文本、
+招聘岗位记录等）统一成 JSON 格式灌入，researcher 即可检索本地库。
 """
 
 from __future__ import annotations
 
 import abc
+import json
+import re
 import urllib.parse
+from pathlib import Path
 
 import httpx
 from bs4 import BeautifulSoup
+
+from prism.config import settings
 
 
 class SearchResult:
@@ -129,8 +136,95 @@ class DuckDuckGoSearch(SearchTool):
         return results
 
 
+class LocalSearchTool(SearchTool):
+    """本地行业知识库检索：从 JSON 文件读取行业数据，关键词匹配检索。
+
+    数据格式（JSON 数组，每条一个行业素材）：
+    [
+      {
+        "id": "c001",
+        "title": "客户官网-产品线介绍",
+        "content": "正文内容……",
+        "source": "https://example.com",
+        "tags": ["外贸", "客户", "产品"]
+      }
+    ]
+
+    外贸方向：灌客户官网/产品资料文本；招聘方向：灌岗位记录（title=岗位名，
+    content=JD 要点，tags=技能/城市）。检索用中文 bigram + 英文单词关键词
+    匹配打分（标题命中×3、标签×2、正文×1），对结构化素材足够且零成本。
+    """
+
+    name = "local_search"
+
+    def __init__(self, kb_path: str = ""):
+        self.kb_path = kb_path or str(settings.local_kb_path)
+        self._kb = self._load(self.kb_path)
+
+    def _load(self, path: str) -> list[dict]:
+        p = Path(path)
+        if not p.exists():
+            print(f"[local_search] 知识库不存在: {p}（行业数据未灌入）")
+            return []
+        return json.loads(p.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _split_keywords(query: str) -> list[str]:
+        """查询词切分：先按空白/标点切 token，中文段转 2-gram，英文段取单词。"""
+        kws: list[str] = []
+        for part in re.split(r"[\s,，。、;；:：\-/()（）]+", query):
+            part = part.strip()
+            if not part:
+                continue
+            # 中文段 → 2-gram；英文段 → 单词
+            for zh in re.findall(r"[\u4e00-\u9fff]+", part):
+                if len(zh) <= 2:
+                    kws.append(zh)
+                else:
+                    kws.extend(zh[i : i + 2] for i in range(len(zh) - 1))
+            kws.extend(e.lower() for e in re.findall(r"[a-z0-9]+", part, re.IGNORECASE))
+        return [k for k in kws if k]
+
+    @staticmethod
+    def _score(item: dict, keywords: list[str]) -> int:
+        title = item.get("title", "")
+        content = item.get("content", "")
+        tags = " ".join(item.get("tags", []))
+        score = 0
+        for kw in keywords:
+            if kw in title:
+                score += 3
+            if kw in tags:
+                score += 2
+            if kw in content:
+                score += 1
+        return score
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        if not self._kb:
+            # 空库：返回空结果（researcher 会过滤掉 → 走 no_evidence 短路）
+            return []
+        keywords = self._split_keywords(query)
+        scored = [
+            (self._score(item, keywords), item)
+            for item in self._kb
+            if self._score(item, keywords) > 0
+        ]
+        scored.sort(key=lambda x: -x[0])
+        return [
+            SearchResult(
+                item.get("title", ""),
+                item.get("source", ""),
+                item.get("content", ""),
+            )
+            for _, item in scored[:max_results]
+        ]
+
+
 def build_search_tool(backend: str, proxy: str = "") -> SearchTool:
     """按配置构建搜索工具。"""
     if backend == "duckduckgo":
         return DuckDuckGoSearch(proxy=proxy)
+    if backend == "local":
+        return LocalSearchTool()
     return DummySearch()
