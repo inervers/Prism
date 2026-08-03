@@ -47,11 +47,13 @@ SYNTHESIS_PROMPT = """你是专业研究报告主编。将以下各章节整合�
 {chapters}"""
 
 
-def _write_chapter(sub_id: str, evs: list[Evidence]) -> str:
-    """生成单个子问题章节。"""
+def _write_chapter(sub_id: str, evs: list[Evidence], feedback: str = "") -> str:
+    """生成单个子问题章节。feedback 非空时带上评审意见重写。"""
     context = _build_chapter_context(sub_id, evs)
     llm = build_llm(temperature=0.4)
     prompt = CHAPTER_PROMPT.format(context=context)
+    if feedback:
+        prompt += f"\n\n上次审查意见（必须逐条修正）：\n{feedback}"
     return llm.invoke(prompt).content
 
 
@@ -72,6 +74,9 @@ def _build_source_list(grouped: dict[str, list[Evidence]]) -> str:
 
 def writer_node(state: PrismState) -> dict:
     grouped = state.get("grouped_evidence", {})
+    feedback = state.get("review_issues", [])
+    feedback_text = "\n".join(feedback) if feedback else ""
+    rewrite_round = state.get("rewrite_count", 0)
     t0 = time.time()
     total_context_chars = sum(
         len(_build_chapter_context(s, e)) for s, e in grouped.items()
@@ -80,7 +85,7 @@ def writer_node(state: PrismState) -> dict:
     # 并行生成各章节（每章上下文短，独立 LLM 调用）
     with ThreadPoolExecutor(max_workers=min(5, max(1, len(grouped)))) as pool:
         futures = {
-            pool.submit(_write_chapter, sub_id, evs): sub_id
+            pool.submit(_write_chapter, sub_id, evs, feedback_text): sub_id
             for sub_id, evs in grouped.items()
         }
         chapters = {
@@ -111,7 +116,7 @@ def writer_node(state: PrismState) -> dict:
             {
                 "node": "writer",
                 "detail": (
-                    f"chapters={len(ordered)} parallel "
+                    f"round={rewrite_round} chapters={len(ordered)} parallel "
                     f"context_chars={total_context_chars} "
                     f"report_len={len(report)} time={elapsed:.1f}s"
                 ),

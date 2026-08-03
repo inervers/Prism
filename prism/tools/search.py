@@ -94,18 +94,24 @@ class DuckDuckGoSearch(SearchTool):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         params = {"q": query}
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        try:
-            resp = httpx.get(
-                self._BASE,
-                params=params,
-                headers=headers,
-                timeout=15,
-                follow_redirects=True,
-                proxy=self.proxy or None,
-            )
-            resp.raise_for_status()
-        except Exception as exc:  # noqa: BLE001 - 搜索失败不致命
-            return [SearchResult(f"搜索失败: {exc}", "", "")]
+        # 轻量重试：网络波动时重试 1 次
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                resp = httpx.get(
+                    self._BASE,
+                    params=params,
+                    headers=headers,
+                    timeout=15,
+                    follow_redirects=True,
+                    proxy=self.proxy or None,
+                )
+                resp.raise_for_status()
+                break
+            except Exception as exc:  # noqa: BLE001 - 搜索失败不致命
+                last_exc = exc
+        else:
+            return [SearchResult(f"搜索失败: {last_exc}", "", "")]
 
         soup = BeautifulSoup(resp.text, "html.parser")
         results: list[SearchResult] = []

@@ -39,4 +39,9 @@ class PrismState(TypedDict, total=False):
     evidence: Annotated[list[Evidence], operator.add]  # Researcher 输出（并行合并）
     grouped_evidence: dict[str, list[Evidence]]  # Aggregator 输出（按子问题分组）
     report: str                           # Writer 最终报告
-    trace: Annotated[list[TraceStep], operator.add]  # 评测轨迹（追加合并）
+    trace: Annotated[list[TraceStep], operator.add]  # 评测轨迹
+    # W3 评审字段
+    rewrite_count: int                    # 已重写次数（防死循环）
+    review_issues: list[str]             # Reviewer 发现的问题
+    review_approved: bool                # Reviewer 是否通过
+    human_feedback: str                  # HITL 人工意见（空=直接通过）（追加合并）
