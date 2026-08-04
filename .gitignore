@@ -7,8 +7,13 @@
 outputs/
 eval/reports/
 
-# 本地数据库（运行时生成）
-data/*.db*.md
+# 本地数据库（运行时生成，含 SQLite WAL/SHM 伴生文件）
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# 外贸数据（脱敏客户/邮件，按约定不进 git）
+data/foreign_trade/
 
 # Python
 __pycache__/
