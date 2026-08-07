@@ -32,5 +32,8 @@ class Settings:
     max_evidence_per_sub: int = int(_get("MAX_EVIDENCE_PER_SUB", "3"))
     report_language: str = _get("REPORT_LANGUAGE", "zh")
 
+    # 上下文预算（字符）：单个章节的证据总长超限时，Writer 自动做首部保留截断压缩
+    context_budget_chars: int = int(_get("CONTEXT_BUDGET_CHARS", "6000"))
+
 
 settings = Settings()

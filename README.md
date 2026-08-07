@@ -20,7 +20,7 @@ START → planner -[Send×N]-→ researcher₁...N(并行) → aggregator → wr
 - **trace**：每个节点写入评测轨迹（token / 耗时 / 命中数），供评测模块消费
 - 无证据时 `no_evidence` 短路终止，不空转
 
-已实现：W1 骨架 / W2 Send 并行+真实搜索 / W3 Reviewer 循环+HITL / W3.1 定向重写 / W4 评测模块
+已实现：W1 骨架 / W2 Send 并行+真实搜索 / W3 Reviewer 循环+HITL / W3.1 定向重写 / W4 评测模块 / W5 上下文压缩
 
 ## 快速开始
 
@@ -44,6 +44,7 @@ python -m prism.main "虚拟电厂商业模式分析" -v --no-human  # 跳过人
 | SEARCH_BACKEND | dummy | dummy=离线骨架联调 / duckduckgo=真实搜索 |
 | MAX_SUBQUESTIONS | 5 | 子问题上限 |
 | MAX_EVIDENCE_PER_SUB | 3 | 每个子问题最多证据条数 |
+| CONTEXT_BUDGET_CHARS | 6000 | 单章节证据预算（字符），超限自动首部保留截断压缩 |
 
 ## 项目结构
 

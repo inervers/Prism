@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 import time
 from pathlib import Path
@@ -21,7 +22,12 @@ from prism.memory import write_memory
 
 OUTPUT_DIR = ROOT_DIR / "outputs"
 
-THREAD_ID = "prism-cli-1"
+
+def _thread_id(topic: str) -> str:
+    """按主题生成稳定的线程 id：不同主题隔离 checkpointer 状态（互不串扰），
+    同一主题可跨进程恢复（HITL 中断续跑）。
+    注意：不用 hash()——Python 字符串 hash 带进程随机盐（PYTHONHASHSEED），跨进程不稳定。"""
+    return f"prism-{hashlib.md5(topic.encode('utf-8')).hexdigest()[:10]}"
 
 
 def _brief(node: str, update: dict) -> str:
@@ -53,7 +59,7 @@ def _brief(node: str, update: dict) -> str:
 
 def run(topic: str, verbose: bool = False, no_human: bool = False) -> str:
     t0 = time.time()
-    config = {"configurable": {"thread_id": THREAD_ID}}
+    config = {"configurable": {"thread_id": _thread_id(topic)}}
 
     # 用 stream 模式实时推进：每个节点完成立即打印，HITL 中断时暂停
     def _stream(input_):

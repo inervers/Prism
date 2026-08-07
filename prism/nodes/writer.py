@@ -10,6 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from prism.config import settings
+from prism.context import compact_evidence
 from prism.llm import build_llm
 from prism.state import Evidence, PrismState
 
@@ -47,12 +48,15 @@ SYNTHESIS_PROMPT = """你是专业研究报告主编。将以下各章节整合�
 {chapters}"""
 
 
-def _write_chapter(sub_id: str, evs: list[Evidence], feedback: str = "") -> tuple[str, int]:
+def _write_chapter(sub_id: str, evs: list[Evidence], feedback: str = "") -> tuple[str, int, int, bool]:
     """生成单个子问题章节。feedback 非空时带上评审意见重写。
 
-    返回 (章节内容, token 消耗)。
+    返回 (章节内容, token 消耗, 实际喂给 LLM 的上下文字符数, 是否压缩过证据)。
     """
-    context = _build_chapter_context(sub_id, evs)
+    # 上下文预算：超限时对证据做首部保留截断（确定性压缩，零 LLM 成本）
+    evs_fed, compressed = compact_evidence(evs, settings.context_budget_chars)
+    context = _build_chapter_context(sub_id, evs_fed)
+    fed_chars = len(context)
     llm = build_llm(temperature=0.4)
     prompt = CHAPTER_PROMPT.format(context=context)
     if feedback:
@@ -61,7 +65,7 @@ def _write_chapter(sub_id: str, evs: list[Evidence], feedback: str = "") -> tupl
     tokens = (
         resp.usage_metadata.get("total_tokens", 0) if resp.usage_metadata else 0
     )
-    return resp.content, tokens
+    return resp.content, tokens, fed_chars, compressed
 
 
 def _build_source_list(grouped: dict[str, list[Evidence]]) -> str:
@@ -103,6 +107,8 @@ def writer_node(state: PrismState) -> dict:
         len(_build_chapter_context(s, e)) for s, e in grouped.items()
     )
     chapter_tokens = 0
+    fed_total_chars = 0
+    any_compressed = False
 
     # 只并行生成需要重写的章节
     if to_rewrite:
@@ -112,9 +118,11 @@ def writer_node(state: PrismState) -> dict:
                 for sub_id in to_rewrite
             }
             for f in futures:
-                content, tokens = f.result()
+                content, tokens, fed_chars, compressed = f.result()
                 cache[futures[f]] = content
                 chapter_tokens += tokens
+                fed_total_chars += fed_chars
+                any_compressed = any_compressed or compressed
 
     # 按子问题顺序合成（保持 planner 拆解顺序）
     ordered = [
@@ -139,6 +147,9 @@ def writer_node(state: PrismState) -> dict:
     if source_list:
         report = f"{report}\n\n## 引用来源\n{source_list}"
 
+    compacted_info = ""
+    if any_compressed:
+        compacted_info = f" compacted={fed_total_chars}/{total_context_chars}"
     elapsed = time.time() - t0
     return {
         "report": report,
@@ -148,8 +159,8 @@ def writer_node(state: PrismState) -> dict:
                 "node": "writer",
                 "detail": (
                     f"round={rewrite_round} rewrote={len(to_rewrite)} "
-                    f"kept={len(to_keep)} context_chars={total_context_chars} "
-                    f"report_len={len(report)} time={elapsed:.1f}s"
+                    f"kept={len(to_keep)} context_chars={total_context_chars}"
+                    f"{compacted_info} report_len={len(report)} time={elapsed:.1f}s"
                 ),
                 "tokens": chapter_tokens + synth_tokens,
             }
