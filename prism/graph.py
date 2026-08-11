@@ -28,11 +28,10 @@ from prism.nodes.reviewer import reviewer_node, route_after_reviewer
 from prism.nodes.writer import writer_node
 from prism.state import PrismState
 
-# checkpointer：SQLite 持久化（缺包时降级 MemorySaver），支持 HITL 中断恢复
-checkpointer = build_checkpointer()
-
-
-def build_graph():
+def build_graph(checkpointer=None):
+    """构建独立的 Prism graph，允许测试注入隔离 checkpointer。"""
+    if checkpointer is None:
+        checkpointer = build_checkpointer()
     graph = StateGraph(PrismState)
 
     graph.add_node("planner", planner_node)
@@ -66,4 +65,6 @@ def build_graph():
     return graph.compile(checkpointer=checkpointer)
 
 
-app = build_graph()
+def get_app(checkpointer=None):
+    """创建 graph；不在模块 import 时打开数据库连接。"""
+    return build_graph(checkpointer=checkpointer)

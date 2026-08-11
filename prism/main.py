@@ -9,25 +9,23 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from langgraph.types import Command
 
 from prism.config import ROOT_DIR
-from prism.graph import app
+from prism.graph import get_app
 from prism.memory import write_memory
 
 OUTPUT_DIR = ROOT_DIR / "outputs"
 
 
-def _thread_id(topic: str) -> str:
-    """按主题生成稳定的线程 id：不同主题隔离 checkpointer 状态（互不串扰），
-    同一主题可跨进程恢复（HITL 中断续跑）。
-    注意：不用 hash()——Python 字符串 hash 带进程随机盐（PYTHONHASHSEED），跨进程不稳定。"""
-    return f"prism-{hashlib.md5(topic.encode('utf-8')).hexdigest()[:10]}"
+def new_thread_id(prefix: str = "prism") -> str:
+    """为一次新运行生成唯一 thread id，避免意外复用旧 checkpoint。"""
+    return f"{prefix}-{uuid.uuid4().hex}"
 
 
 def _brief(node: str, update: dict) -> str:
@@ -57,13 +55,21 @@ def _brief(node: str, update: dict) -> str:
     return ""
 
 
-def run(topic: str, verbose: bool = False, no_human: bool = False) -> str:
+def run(
+    topic: str,
+    verbose: bool = False,
+    no_human: bool = False,
+    *,
+    graph=None,
+    thread_id: str | None = None,
+) -> str:
     t0 = time.time()
-    config = {"configurable": {"thread_id": _thread_id(topic)}}
+    graph = graph or get_app()
+    config = {"configurable": {"thread_id": thread_id or new_thread_id()}}
 
     # 用 stream 模式实时推进：每个节点完成立即打印，HITL 中断时暂停
     def _stream(input_):
-        for event in app.stream(input_, config=config, stream_mode="updates"):
+        for event in graph.stream(input_, config=config, stream_mode="updates"):
             for node, update in event.items():
                 if node == "human_review" and isinstance(update, dict) and "__interrupt__" in update:
                     yield node, update
@@ -94,7 +100,7 @@ def run(topic: str, verbose: bool = False, no_human: bool = False) -> str:
             pass
 
     # 取最终状态
-    state = app.get_state(config).values
+    state = graph.get_state(config).values
     report = state.get("report", "")
 
     # 任务完成：沉淀长期记忆（结论摘要 + 引用来源），供后续任务复用

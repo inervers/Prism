@@ -96,26 +96,24 @@ def memory_count() -> int:
 
 # ---------------------------------------------------------------- checkpointer
 
-def build_checkpointer():
-    """构建 checkpointer：优先 SQLite 持久化，缺包时降级 MemorySaver。
+def build_checkpointer(path: Path | str = _CHECKPOINT_DB):
+    """构建正式运行使用的 SQLite checkpointer。
 
-    langgraph 1.x 的 SQLite checkpointer 在独立包 langgraph-checkpoint-sqlite，
-    未安装时自动降级（不阻塞使用），打印提示。
+    HITL 的跨进程恢复依赖持久化，因此缺少独立依赖时直接失败；测试如需
+    内存 checkpointer，应显式向 ``build_graph`` 注入 ``MemorySaver``。
     """
     try:
-        import sqlite3
-
         from langgraph.checkpoint.sqlite import SqliteSaver
+    except ImportError as exc:
+        raise RuntimeError(
+            "SQLite checkpointer is required. Install with: "
+            "pip install langgraph-checkpoint-sqlite"
+        ) from exc
 
-        _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
-        # 直接传连接（新版 from_conn_string 返回 context manager，不可直接用）
-        # check_same_thread=False：Send 并行 researcher 跨线程写 checkpoint
-        conn = sqlite3.connect(str(_CHECKPOINT_DB), check_same_thread=False)
-        saver = SqliteSaver(conn)
-        print(f"[memory] checkpointer: SQLite ({_CHECKPOINT_DB.name})")
-        return saver
-    except ImportError:
-        from langgraph.checkpoint.memory import MemorySaver
-
-        print("[memory] checkpointer: MemorySaver（未安装 langgraph-checkpoint-sqlite，任务状态不持久化）")
-        return MemorySaver()
+    db_path = Path(path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    # check_same_thread=False：Send 并行 researcher 可能跨线程写 checkpoint。
+    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    saver = SqliteSaver(conn)
+    print(f"[memory] checkpointer: SQLite ({db_path.name})")
+    return saver

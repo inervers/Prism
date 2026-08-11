@@ -16,12 +16,13 @@ import argparse
 import json
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from eval.metrics import aggregate_metrics, compute_task_metrics
 from prism.config import ROOT_DIR, settings
-from prism.graph import app
+from prism.graph import get_app
 
 EVAL_DIR = ROOT_DIR / "eval"
 REPORT_DIR = EVAL_DIR / "reports"
@@ -39,7 +40,10 @@ def run_single(task: dict, verbose: bool = False) -> dict:
     """运行单个评测任务，返回指标。用 stream 模式实时打印进度。"""
     topic = task["topic"]
     task_id = task["id"]
-    config = {"configurable": {"thread_id": f"eval-{task_id}"}}
+    config = {
+        "configurable": {"thread_id": f"eval-{task_id}-{uuid.uuid4().hex}"}
+    }
+    app = get_app()
 
     t0 = time.time()
     try:
