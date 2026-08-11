@@ -44,11 +44,24 @@ def load_cases(path: Path = DEFAULT_DATASET) -> tuple[list[dict], str]:
 
 
 def run_cases(cases: list[dict]) -> list[dict]:
+    runtime_root = ROOT_DIR / ".test-runtime"
+    (runtime_root / "behavior").mkdir(parents=True, exist_ok=True)
+    (runtime_root / "cache").mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
     for case in cases:
         started = time.perf_counter()
         completed = subprocess.run(
-            [sys.executable, "-m", "pytest", case["nodeid"], "-q"],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                case["nodeid"],
+                "-q",
+                "--basetemp",
+                str(runtime_root / "behavior" / case["id"]),
+                "-o",
+                f"cache_dir={runtime_root / 'cache'}",
+            ],
             cwd=ROOT_DIR,
             capture_output=True,
             text=True,
