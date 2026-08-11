@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "clean_pass",
+      "expected_status": "passed",
+      "expected_quality_passed": true
+    },
+    {
+      "id": "parse_error",
+      "expected_status": "parse_error",
+      "expected_quality_passed": false
+    },
+    {
+      "id": "invalid_citation",
+      "expected_status": "failed",
+      "expected_quality_passed": false
+    }
+  ]
+}

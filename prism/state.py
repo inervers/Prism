@@ -5,7 +5,7 @@ Aggregator 整理证据，Writer 产出报告。trace 记录每一步供评测�
 """
 
 import operator
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 
 class SubQuestion(TypedDict):
@@ -44,6 +44,13 @@ class PrismState(TypedDict, total=False):
     rewrite_count: int                    # 已重写次数（防死循环）
     review_issues: list[str]             # Reviewer 发现的问题
     review_approved: bool                # Reviewer 是否通过
+    quality_passed: bool                 # Reviewer 是否确认质量通过
+    review_status: str                   # passed/failed/parse_error/retry_exhausted
+    remaining_issues: list[str]          # 终止时仍未解决的问题
+    terminated_by_limit: bool            # 是否因重试上限终止
+    review_parse_error: str              # Reviewer 结构化输出解析错误
+    review_parse_attempts: int           # 连续解析失败次数
+    claim_verdicts: list[dict[str, Any]] # claim 到 evidence 的审查结果
     human_feedback: str                  # HITL 人工意见（空=直接通过）
     # W3.1 定向重写字段
     chapters_cache: dict[str, str]       # 子问题 id → 已生成章节（重写时复用）
