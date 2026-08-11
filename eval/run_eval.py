@@ -13,7 +13,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib.metadata
 import json
+import subprocess
 import sys
 import time
 import uuid
@@ -36,13 +39,49 @@ def load_tasks() -> list[dict]:
     return json.loads(tasks_file.read_text(encoding="utf-8"))["tasks"]
 
 
+def _is_interrupt_event(node: str, update) -> bool:
+    """识别 LangGraph v1 顶层 interrupt 事件及旧版节点内事件。"""
+    return node == "__interrupt__" or (
+        node == "human_review"
+        and isinstance(update, dict)
+        and "__interrupt__" in update
+    )
+
+
+def _progress_marker(kind: str) -> str:
+    """返回 Windows GBK 终端也可安全输出的进度标记。"""
+    return {"running": ">", "passed": "OK", "failed": "FAIL"}[kind]
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git_commit() -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT_DIR,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else "unknown"
+
+
+def _version(package: str) -> str:
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return "not-installed"
+
+
 def run_single(task: dict, verbose: bool = False) -> dict:
     """运行单个评测任务，返回指标。用 stream 模式实时打印进度。"""
     topic = task["topic"]
     task_id = task["id"]
-    config = {
-        "configurable": {"thread_id": f"eval-{task_id}-{uuid.uuid4().hex}"}
-    }
+    run_id = f"eval-{task_id}-{uuid.uuid4().hex}"
+    config = {"configurable": {"thread_id": run_id}}
     app = get_app()
 
     t0 = time.time()
@@ -54,31 +93,40 @@ def run_single(task: dict, verbose: bool = False) -> dict:
         interrupted = False
         for event in app.stream({"topic": topic}, config=config, stream_mode="updates"):
             for node, update in event.items():
-                if node == "human_review" and isinstance(update, dict) and "__interrupt__" in update:
+                if _is_interrupt_event(node, update):
                     interrupted = True
                 elif verbose:
                     detail = _brief(node, update)
                     if detail:
-                        print(f"  {task_id} ▶ {node:12s} {detail}")
+                        print(
+                            f"  {task_id} [{_progress_marker('running')}] "
+                            f"{node:12s} {detail}"
+                        )
 
         if interrupted:
             if verbose:
-                print(f"  {task_id} ▶ HITL 自动 approve")
+                print(f"  {task_id} [{_progress_marker('running')}] HITL 自动 approve")
             for event in app.stream(Command(resume="approve"), config=config, stream_mode="updates"):
                 if verbose:
                     for node, update in event.items():
                         detail = _brief(node, update)
                         if detail:
-                            print(f"  {task_id} ▶ {node:12s} {detail}")
+                            print(
+                                f"  {task_id} [{_progress_marker('running')}] "
+                                f"{node:12s} {detail}"
+                            )
 
         state = app.get_state(config).values
         elapsed = time.time() - t0
         metrics = compute_task_metrics(state, elapsed, task_id)
         metrics["topic"] = topic
+        metrics["run_id"] = run_id
         if verbose:
-            status = "✓" if metrics["completed"] else "✗"
+            status = _progress_marker(
+                "passed" if metrics["completed"] else "failed"
+            )
             print(
-                f"  {status} {task_id} {topic[:30]:32s} "
+                f"  [{status}] {task_id} {topic[:30]:32s} "
                 f"hit={metrics['tool_hit_rate']} ev={metrics['evidence_deduped']} "
                 f"tok={metrics['total_tokens']} t={metrics['total_time_s']}s"
             )
@@ -86,7 +134,10 @@ def run_single(task: dict, verbose: bool = False) -> dict:
 
     except Exception as exc:  # noqa: BLE001 - 单任务失败不阻塞整体
         if verbose:
-            print(f"  ✗ {task_id} {topic[:30]:32s} ERROR: {exc}")
+            print(
+                f"  [{_progress_marker('failed')}] {task_id} "
+                f"{topic[:30]:32s} ERROR: {exc}"
+            )
         return {
             "task_id": task_id,
             "topic": topic,
@@ -137,8 +188,10 @@ def render_markdown(agg: dict) -> str:
         "| 指标 | 值 |",
         "|---|---|",
         f"| 任务数 | {agg['num_tasks']} |",
-        f"| 完成率（产出有效报告） | {agg['completion_rate']:.1%} |",
-        f"| 评审通过率 | {agg['review_pass_rate']:.1%} |",
+        f"| 工作流完成率 | {agg['workflow_completion_rate']:.1%} |",
+        f"| Clean quality pass rate | {agg['clean_pass_rate']:.1%} |",
+        f"| Reviewer 解析失败任务率 | {agg['parse_error_rate']:.1%} |",
+        f"| 重试耗尽任务率 | {agg['retry_exhausted_rate']:.1%} |",
         f"| 平均工具命中率 | {agg['avg_tool_hit_rate']:.1%} |",
         f"| 平均去重率 | {agg['avg_dedup_rate']:.1%} |",
         f"| 平均证据数（去重后） | {agg['avg_evidence_deduped']} |",
@@ -179,7 +232,23 @@ def main() -> None:
     parser.add_argument("--max-tasks", type=int, default=0, help="只跑前 N 个任务")
     parser.add_argument("--task", default="", help="只跑指定任务 id")
     parser.add_argument("-v", "--verbose", action="store_true", help="打印每个任务进度")
+    snapshot_group = parser.add_mutually_exclusive_group()
+    snapshot_group.add_argument(
+        "--search-snapshot", type=Path, help="只使用冻结搜索快照，禁止联网回退"
+    )
+    snapshot_group.add_argument(
+        "--record-search-snapshot", type=Path, help="记录本次真实搜索输入"
+    )
     args = parser.parse_args()
+
+    settings.search_snapshot_path = (
+        str(args.search_snapshot.resolve()) if args.search_snapshot else ""
+    )
+    settings.record_search_snapshot_path = (
+        str(args.record_search_snapshot.resolve())
+        if args.record_search_snapshot
+        else ""
+    )
 
     tasks = load_tasks()
     if args.task:
@@ -197,6 +266,19 @@ def main() -> None:
         results.append(run_single(task, verbose=args.verbose))
 
     agg = aggregate_metrics(results)
+    tasks_path = EVAL_DIR / "tasks.json"
+    active_snapshot = args.search_snapshot or args.record_search_snapshot
+    agg["metadata"] = {
+        "commit": _git_commit(),
+        "model": settings.model,
+        "search_backend": settings.search_backend,
+        "dataset_sha256": _sha256(tasks_path),
+        "search_snapshot_sha256": (
+            _sha256(active_snapshot) if active_snapshot and active_snapshot.exists() else ""
+        ),
+        "langgraph_version": _version("langgraph"),
+        "checkpoint_sqlite_version": _version("langgraph-checkpoint-sqlite"),
+    }
 
     # 落盘
     REPORT_DIR.mkdir(parents=True, exist_ok=True)

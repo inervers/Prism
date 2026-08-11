@@ -11,7 +11,9 @@ from __future__ import annotations
 import abc
 import json
 import re
+import threading
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -43,6 +45,72 @@ class SearchTool(abc.ABC):
 
     def __call__(self, query: str, max_results: int = 5) -> list[SearchResult]:
         return self.search(query, max_results)
+
+
+class SnapshotMissError(KeyError):
+    """冻结搜索快照中不存在指定 query。"""
+
+
+def _normalize_query(query: str) -> str:
+    return " ".join(query.split())
+
+
+class SnapshotSearchTool(SearchTool):
+    """只读取冻结输入的搜索工具；缺失 query 时禁止回退联网。"""
+
+    name = "snapshot_search"
+
+    def __init__(self, snapshot_path: str | Path):
+        self.snapshot_path = Path(snapshot_path)
+        data = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
+        if data.get("schema_version") != 1 or not isinstance(data.get("queries"), dict):
+            raise ValueError(f"invalid search snapshot: {self.snapshot_path}")
+        self._queries = data["queries"]
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        normalized = _normalize_query(query)
+        if normalized not in self._queries:
+            raise SnapshotMissError(f"搜索快照缺少未知查询: {query}")
+        return [
+            SearchResult(item["title"], item["url"], item["snippet"])
+            for item in self._queries[normalized][:max_results]
+        ]
+
+
+class RecordingSearchTool(SearchTool):
+    """包装真实 SearchTool，并以线程安全方式记录 query/result 快照。"""
+
+    name = "recording_search"
+    _write_lock = threading.Lock()
+
+    def __init__(self, delegate: SearchTool, snapshot_path: str | Path):
+        self.delegate = delegate
+        self.snapshot_path = Path(snapshot_path)
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        results = self.delegate.search(query, max_results=max_results)
+        normalized = _normalize_query(query)
+        with self._write_lock:
+            if self.snapshot_path.exists():
+                data = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
+            else:
+                data = {
+                    "schema_version": 1,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "backend": self.delegate.name,
+                    "queries": {},
+                }
+            data["queries"][normalized] = [
+                {"title": item.title, "url": item.url, "snippet": item.snippet}
+                for item in results
+            ]
+            self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = self.snapshot_path.with_suffix(self.snapshot_path.suffix + ".tmp")
+            temp_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            temp_path.replace(self.snapshot_path)
+        return results
 
 
 class DummySearch(SearchTool):
@@ -223,8 +291,14 @@ class LocalSearchTool(SearchTool):
 
 def build_search_tool(backend: str, proxy: str = "") -> SearchTool:
     """按配置构建搜索工具。"""
+    if settings.search_snapshot_path:
+        return SnapshotSearchTool(settings.search_snapshot_path)
     if backend == "duckduckgo":
-        return DuckDuckGoSearch(proxy=proxy)
-    if backend == "local":
-        return LocalSearchTool()
-    return DummySearch()
+        tool: SearchTool = DuckDuckGoSearch(proxy=proxy)
+    elif backend == "local":
+        tool = LocalSearchTool()
+    else:
+        tool = DummySearch()
+    if settings.record_search_snapshot_path:
+        return RecordingSearchTool(tool, settings.record_search_snapshot_path)
+    return tool

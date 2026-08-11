@@ -20,6 +20,8 @@ class Settings:
     model: str = _get("LLM_MODEL", "deepseek-v4-flash")
     search_backend: str = _get("SEARCH_BACKEND", "dummy")
     search_proxy: str = _get("SEARCH_PROXY", "")  # 如 http://127.0.0.1:7897
+    search_snapshot_path: str = _get("SEARCH_SNAPSHOT_PATH", "")
+    record_search_snapshot_path: str = _get("RECORD_SEARCH_SNAPSHOT_PATH", "")
     local_kb_path: str = _get(
         "LOCAL_KB_PATH", str(ROOT_DIR / "data" / "industry_kb.json")
     )

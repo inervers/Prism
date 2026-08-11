@@ -6,6 +6,7 @@
 # 输出产物
 outputs/
 eval/reports/
+eval/snapshots/*_smoke.json
 
 # 本地数据库（运行时生成，含 SQLite WAL/SHM 伴生文件）
 data/*.db

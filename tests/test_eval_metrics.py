@@ -97,6 +97,7 @@ def test_behavior_runner_writes_machine_readable_report(tmp_path):
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -105,3 +106,32 @@ def test_behavior_runner_writes_machine_readable_report(tmp_path):
     assert report["num_cases"] == 10
     assert report["passed"] == 10
     assert report["dataset_sha256"]
+
+
+def test_eval_cli_exposes_search_snapshot_modes():
+    completed = subprocess.run(
+        [sys.executable, "-m", "eval.run_eval", "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "--search-snapshot" in completed.stdout
+    assert "--record-search-snapshot" in completed.stdout
+
+
+def test_eval_detects_langgraph_v1_interrupt_event():
+    from eval.run_eval import _is_interrupt_event
+
+    assert _is_interrupt_event("__interrupt__", (object(),)) is True
+    assert _is_interrupt_event("writer", {"report": "done"}) is False
+
+
+def test_eval_progress_markers_are_gbk_safe():
+    from eval.run_eval import _progress_marker
+
+    for kind in ("running", "passed", "failed"):
+        _progress_marker(kind).encode("gbk")

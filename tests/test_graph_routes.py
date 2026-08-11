@@ -75,3 +75,32 @@ def test_context_overflow_is_compacted_without_dropping_evidence():
     assert changed is True
     assert len(compacted) == 1
     assert compacted[0]["content"].endswith(TRUNCATE_SUFFIX)
+
+
+def test_search_snapshot_record_and_replay(tmp_path):
+    from prism.tools.search import (
+        RecordingSearchTool,
+        SearchResult,
+        SearchTool,
+        SnapshotMissError,
+        SnapshotSearchTool,
+    )
+
+    class FixedSearch(SearchTool):
+        def search(self, query: str, max_results: int = 5):
+            return [
+                SearchResult("标题 A", "https://example.test/a", f"{query} 的正文 A"),
+                SearchResult("标题 B", "https://example.test/b", "正文 B"),
+            ][:max_results]
+
+    snapshot_path = tmp_path / "search_snapshot.json"
+    recorded = RecordingSearchTool(FixedSearch(), snapshot_path)
+    original = recorded.search("固定查询", max_results=2)
+
+    replayed = SnapshotSearchTool(snapshot_path).search("固定查询", max_results=2)
+
+    assert [(r.title, r.url, r.snippet) for r in replayed] == [
+        (r.title, r.url, r.snippet) for r in original
+    ]
+    with pytest.raises(SnapshotMissError, match="未知查询"):
+        SnapshotSearchTool(snapshot_path).search("未知查询")
