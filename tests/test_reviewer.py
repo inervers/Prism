@@ -75,3 +75,19 @@ def test_rewrite_limit_stops_without_claiming_quality_pass(monkeypatch, base_sta
     assert result["review_status"] == "retry_exhausted"
     assert result["terminated_by_limit"] is True
     assert result["remaining_issues"]
+
+
+def test_unsupported_claim_is_a_quality_failure(monkeypatch, base_state):
+    llm = CapturingLLM(
+        '{"quality_passed": false, "claim_verdicts": [{"claim": "方案 A '
+        '可节省 90% 成本", "status": "unsupported", "evidence_ids": [], '
+        '"reason": "证据没有成本数字", "section_id": "q1"}], '
+        '"issues": ["[q1] 90% 成本缺少证据"], "rewrite_targets": ["q1"]}'
+    )
+    monkeypatch.setattr(reviewer, "build_llm", lambda **_: llm)
+
+    result = reviewer.reviewer_node(base_state())
+
+    assert result["quality_passed"] is False
+    assert result["review_status"] == "failed"
+    assert result["rewrite_targets"] == ["q1"]

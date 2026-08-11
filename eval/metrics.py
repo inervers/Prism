@@ -26,7 +26,7 @@ def compute_task_metrics(state: dict, elapsed: float, task_id: str) -> dict:
     evidence = state.get("evidence", [])
     grouped = state.get("grouped_evidence", {})
 
-    completed = bool(report and len(report) > 100 and grouped)
+    workflow_completed = bool(report and len(report) > 100 and grouped)
     evidence_blocks = sum(len(v) for v in grouped.values())
 
     # ---- L2 工具调用 ----
@@ -47,12 +47,21 @@ def compute_task_metrics(state: dict, elapsed: float, task_id: str) -> dict:
     dedup_rate = 1 - (deduped_count / raw_count) if raw_count else 0.0
 
     # ---- L3 质量把关 ----
-    review_approved = state.get("review_approved", False)
+    quality_passed = state.get(
+        "quality_passed", state.get("review_approved", False)
+    )
+    review_status = state.get(
+        "review_status", "passed" if quality_passed else "failed"
+    )
+    terminated_by_limit = state.get("terminated_by_limit", False)
     rewrite_count = state.get("rewrite_count", 0)
     review_issues = state.get("review_issues", [])
 
     # 引用有效性：程序化检查报告的 [qX-N] 是否都在证据范围内
     review_steps = [s for s in state.get("trace", []) if s["node"] == "reviewer"]
+    parse_error_count = sum(
+        1 for step in review_steps if "status=parse_error" in step.get("detail", "")
+    )
     citation_check = None
     for s in review_steps:
         m = re.search(r"cited=(\d+)", s["detail"])
@@ -71,7 +80,9 @@ def compute_task_metrics(state: dict, elapsed: float, task_id: str) -> dict:
     return {
         "task_id": task_id,
         "topic": state.get("topic", ""),
-        "completed": completed,
+        # completed/review_approved 仅为历史报告兼容别名；新口径使用下列字段。
+        "completed": workflow_completed,
+        "workflow_completed": workflow_completed,
         "report_len": len(report),
         "subquestions": len(subquestions),
         "evidence_raw": raw_count,
@@ -81,7 +92,11 @@ def compute_task_metrics(state: dict, elapsed: float, task_id: str) -> dict:
         "search_hits": search_hits,
         "tool_hit_rate": round(tool_hit_rate, 3),
         "dedup_rate": round(dedup_rate, 3),
-        "review_approved": review_approved,
+        "review_approved": quality_passed,
+        "quality_passed": quality_passed,
+        "review_status": review_status,
+        "parse_error_count": parse_error_count,
+        "terminated_by_limit": terminated_by_limit,
         "rewrite_count": rewrite_count,
         "review_issues": review_issues,
         "citation_count": citation_check,
@@ -99,14 +114,31 @@ def aggregate_metrics(results: list[dict]) -> dict:
         vals = [r[key] for r in results if r.get(key) is not None]
         return round(sum(vals) / len(vals), 3) if vals else default
 
-    completed = sum(1 for r in results if r["completed"])
-    approved = sum(1 for r in results if r.get("review_approved"))
-    hit_tasks = [r for r in results if r["search_attempts"] > 0]
+    completed = sum(
+        1 for r in results if r.get("workflow_completed", r.get("completed", False))
+    )
+    clean_passed = sum(
+        1 for r in results if r.get("quality_passed", r.get("review_approved", False))
+    )
+    parse_error_tasks = sum(1 for r in results if r.get("parse_error_count", 0) > 0)
+    retry_exhausted = sum(
+        1
+        for r in results
+        if r.get("terminated_by_limit") or r.get("review_status") == "retry_exhausted"
+    )
+
+    workflow_completion_rate = round(completed / n, 3) if n else 0.0
+    clean_pass_rate = round(clean_passed / n, 3) if n else 0.0
 
     return {
         "num_tasks": n,
-        "completion_rate": round(completed / n, 3) if n else 0.0,
-        "review_pass_rate": round(approved / n, 3) if n else 0.0,
+        "workflow_completion_rate": workflow_completion_rate,
+        "clean_pass_rate": clean_pass_rate,
+        "parse_error_rate": round(parse_error_tasks / n, 3) if n else 0.0,
+        "retry_exhausted_rate": round(retry_exhausted / n, 3) if n else 0.0,
+        # 历史消费者兼容别名，语义分别等同于 workflow completion / clean pass。
+        "completion_rate": workflow_completion_rate,
+        "review_pass_rate": clean_pass_rate,
         "avg_tool_hit_rate": avg("tool_hit_rate"),
         "avg_dedup_rate": avg("dedup_rate"),
         "avg_evidence_raw": avg("evidence_raw"),

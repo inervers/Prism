@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "description": "Prism LangGraph 离线行为评测集",
+  "cases": [
+    {
+      "id": "clean_pass",
+      "nodeid": "tests/test_reviewer.py::test_reviewer_prompt_contains_evidence_body",
+      "expected_review_status": "passed",
+      "expected_terminal": "human_review"
+    },
+    {
+      "id": "invalid_citation",
+      "nodeid": "tests/test_reviewer.py::test_reviewer_rejects_invalid_citation_without_calling_llm",
+      "expected_review_status": "failed",
+      "expected_terminal": "writer"
+    },
+    {
+      "id": "unsupported_claim",
+      "nodeid": "tests/test_reviewer.py::test_unsupported_claim_is_a_quality_failure",
+      "expected_review_status": "failed",
+      "expected_terminal": "writer"
+    },
+    {
+      "id": "review_parse_error",
+      "nodeid": "tests/test_reviewer.py::test_reviewer_parse_error_fails_closed",
+      "expected_review_status": "parse_error",
+      "expected_terminal": "reviewer"
+    },
+    {
+      "id": "retry_exhausted",
+      "nodeid": "tests/test_reviewer.py::test_rewrite_limit_stops_without_claiming_quality_pass",
+      "expected_review_status": "retry_exhausted",
+      "expected_terminal": "human_review"
+    },
+    {
+      "id": "no_evidence",
+      "nodeid": "tests/test_graph_routes.py::test_no_evidence_short_circuit_is_not_a_quality_pass",
+      "expected_review_status": "no_evidence",
+      "expected_terminal": "no_evidence"
+    },
+    {
+      "id": "hitl_approve",
+      "nodeid": "tests/test_checkpoint_resume.py::test_cross_process_interrupt_resume",
+      "expected_review_status": "passed",
+      "expected_terminal": "completed"
+    },
+    {
+      "id": "hitl_feedback",
+      "nodeid": "tests/test_graph_routes.py::test_hitl_feedback_routes_to_revision",
+      "expected_review_status": "human_feedback",
+      "expected_terminal": "revise"
+    },
+    {
+      "id": "cross_process_resume",
+      "nodeid": "tests/test_checkpoint_resume.py::test_cross_process_interrupt_resume",
+      "expected_review_status": "passed",
+      "expected_terminal": "completed"
+    },
+    {
+      "id": "context_overflow",
+      "nodeid": "tests/test_graph_routes.py::test_context_overflow_is_compacted_without_dropping_evidence",
+      "expected_review_status": "not_applicable",
+      "expected_terminal": "compacted"
+    }
+  ]
+}

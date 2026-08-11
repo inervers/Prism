@@ -14,7 +14,11 @@ def no_evidence_node(state: PrismState) -> dict:
     )
     return {
         "report": report,
-        "review_approved": True,  # 短路，不再走评审
+        "review_approved": False,
+        "quality_passed": False,
+        "review_status": "no_evidence",
+        "remaining_issues": ["[global] 所有子问题均无可用证据"],
+        "terminated_by_limit": False,
         "trace": [
             {
                 "node": "no_evidence",
