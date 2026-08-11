@@ -12,7 +12,9 @@ import argparse
 import sys
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from langgraph.types import Command
 
@@ -21,6 +23,16 @@ from prism.graph import get_app
 from prism.memory import write_memory
 
 OUTPUT_DIR = ROOT_DIR / "outputs"
+
+
+@dataclass(frozen=True)
+class RunResult:
+    """一次 start/resume 调用的可序列化运行结果。"""
+
+    status: Literal["interrupted", "completed"]
+    thread_id: str
+    report: str
+    interrupt_payload: dict | None = None
 
 
 def new_thread_id(prefix: str = "prism") -> str:
@@ -55,6 +67,75 @@ def _brief(node: str, update: dict) -> str:
     return ""
 
 
+def _interrupt_value(update) -> dict | None:
+    """兼容 LangGraph v1 interrupt event，提取 JSON payload。"""
+    interrupts = update.get("__interrupt__", []) if isinstance(update, dict) else update
+    if not interrupts:
+        return None
+    first = interrupts[0]
+    value = getattr(first, "value", first)
+    return value if isinstance(value, dict) else {"value": value}
+
+
+def _stream_updates(graph, input_, config: dict, verbose: bool = False):
+    """推进 graph，并产出 HITL interrupt payload。"""
+    for event in graph.stream(input_, config=config, stream_mode="updates"):
+        for node, update in event.items():
+            if node == "__interrupt__" or (
+                node == "human_review" and isinstance(update, dict)
+            ):
+                payload = _interrupt_value(update)
+                if payload is not None:
+                    yield payload
+                    continue
+            if verbose:
+                detail = _brief(node, update)
+                if detail:
+                    print(f"  ▶ {node:12s} {detail}")
+
+
+def start_run(
+    topic: str,
+    *,
+    thread_id: str,
+    graph,
+    verbose: bool = False,
+) -> RunResult:
+    """启动新任务，运行到 HITL interrupt 或工作流结束。"""
+    config = {"configurable": {"thread_id": thread_id}}
+    interrupt_payload = next(
+        iter(_stream_updates(graph, {"topic": topic}, config, verbose)), None
+    )
+    state = graph.get_state(config).values
+    return RunResult(
+        status="interrupted" if interrupt_payload is not None else "completed",
+        thread_id=thread_id,
+        report=state.get("report", ""),
+        interrupt_payload=interrupt_payload,
+    )
+
+
+def resume_run(
+    *,
+    thread_id: str,
+    feedback: str,
+    graph,
+    verbose: bool = False,
+) -> RunResult:
+    """使用同一 thread id 从持久化 interrupt 恢复任务。"""
+    config = {"configurable": {"thread_id": thread_id}}
+    interrupt_payload = next(
+        iter(_stream_updates(graph, Command(resume=feedback), config, verbose)), None
+    )
+    state = graph.get_state(config).values
+    return RunResult(
+        status="interrupted" if interrupt_payload is not None else "completed",
+        thread_id=thread_id,
+        report=state.get("report", ""),
+        interrupt_payload=interrupt_payload,
+    )
+
+
 def run(
     topic: str,
     verbose: bool = False,
@@ -65,28 +146,16 @@ def run(
 ) -> str:
     t0 = time.time()
     graph = graph or get_app()
-    config = {"configurable": {"thread_id": thread_id or new_thread_id()}}
+    active_thread_id = thread_id or new_thread_id()
+    config = {"configurable": {"thread_id": active_thread_id}}
 
-    # 用 stream 模式实时推进：每个节点完成立即打印，HITL 中断时暂停
-    def _stream(input_):
-        for event in graph.stream(input_, config=config, stream_mode="updates"):
-            for node, update in event.items():
-                if node == "human_review" and isinstance(update, dict) and "__interrupt__" in update:
-                    yield node, update
-                elif verbose:
-                    detail = _brief(node, update)
-                    if detail:
-                        print(f"  ▶ {node:12s} {detail}")
-
-    # 第一段：执行到 HITL 中断点（或结束）
-    interrupt_payload = None
-    for node, update in _stream({"topic": topic}):
-        if node == "human_review":
-            payload = update["__interrupt__"][0]
-            interrupt_payload = payload
+    result = start_run(
+        topic, thread_id=active_thread_id, graph=graph, verbose=verbose
+    )
 
     # 处理 HITL 中断
-    if interrupt_payload is not None:
+    if result.status == "interrupted":
+        interrupt_payload = result.interrupt_payload or {}
         report_preview = interrupt_payload.get("report_preview", "")
         if no_human:
             resume = "approve"
@@ -95,9 +164,12 @@ def run(
             print(f"报告已生成，预览：\n{report_preview}\n")
             feedback = input("通过请直接回车，或输入修改意见: ").strip()
             resume = feedback if feedback else "approve"
-        # 第二段：恢复执行（approve 或带意见 → revise）
-        for node, update in _stream(Command(resume=resume)):
-            pass
+        result = resume_run(
+            thread_id=active_thread_id,
+            feedback=resume,
+            graph=graph,
+            verbose=verbose,
+        )
 
     # 取最终状态
     state = graph.get_state(config).values
@@ -135,14 +207,45 @@ def main() -> None:
     parser.add_argument("topic", nargs="?", help="研究主题")
     parser.add_argument("-v", "--verbose", action="store_true", help="实时打印节点进度")
     parser.add_argument("--no-human", action="store_true", help="跳过人工审核")
+    parser.add_argument("--thread-id", default="", help="为新任务显式指定 thread id")
+    parser.add_argument(
+        "--pause-at-human", action="store_true", help="到 HITL 后退出，稍后跨进程恢复"
+    )
+    parser.add_argument("--resume", metavar="THREAD_ID", help="恢复指定 thread id")
+    parser.add_argument("--feedback", default="approve", help="恢复时提交的审核意见")
     args = parser.parse_args()
+
+    if args.resume:
+        result = resume_run(
+            thread_id=args.resume,
+            feedback=args.feedback,
+            graph=get_app(),
+            verbose=args.verbose,
+        )
+        print(result.report)
+        return
 
     topic = args.topic or input("请输入研究主题: ").strip()
     if not topic:
         print("主题不能为空", file=sys.stderr)
         sys.exit(1)
 
-    report = run(topic, verbose=args.verbose, no_human=args.no_human)
+    if args.pause_at_human:
+        thread_id = args.thread_id or new_thread_id()
+        result = start_run(
+            topic, thread_id=thread_id, graph=get_app(), verbose=args.verbose
+        )
+        print(f"status={result.status} thread_id={thread_id}")
+        if result.interrupt_payload:
+            print(result.interrupt_payload.get("report_preview", ""))
+        return
+
+    report = run(
+        topic,
+        verbose=args.verbose,
+        no_human=args.no_human,
+        thread_id=args.thread_id or None,
+    )
     print(report)
 
 
