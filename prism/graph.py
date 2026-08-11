@@ -53,8 +53,11 @@ def build_graph():
         "aggregator", route_after_aggregator, ["writer", "no_evidence"]
     )
     graph.add_edge("writer", "reviewer")
-    # Reviewer 条件路由：不通过打回 writer，通过进入 HITL
-    graph.add_conditional_edges("reviewer", route_after_reviewer, ["writer", "human_review"])
+    # Reviewer 条件路由：解析失败先自重试，质量失败打回 writer，
+    # 通过或重试耗尽进入 HITL（耗尽不等于质量通过）。
+    graph.add_conditional_edges(
+        "reviewer", route_after_reviewer, ["reviewer", "writer", "human_review"]
+    )
     # HITL 条件路由：有意见 → revise，否则 END
     graph.add_conditional_edges("human_review", route_after_human, ["revise", END])
     graph.add_edge("revise", END)

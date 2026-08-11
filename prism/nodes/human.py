@@ -38,6 +38,9 @@ def human_review_node(state: PrismState) -> dict:
         {
             "message": "报告已生成，请审核。直接通过请回复 approve，或提出修改意见。",
             "report_preview": report[:500] + ("..." if len(report) > 500 else ""),
+            "review_status": state.get("review_status", "unknown"),
+            "quality_passed": state.get("quality_passed", False),
+            "remaining_issues": state.get("remaining_issues", []),
         }
     )
 

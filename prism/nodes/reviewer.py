@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import time
 from typing import Literal
@@ -21,6 +20,7 @@ from prism.llm import build_llm
 from prism.state import PrismState
 
 MAX_REWRITES = 2
+MAX_REVIEW_PARSE_RETRIES = 1
 
 REVIEW_CONTEXT_BUDGET_CHARS = 12_000
 
@@ -176,36 +176,50 @@ def reviewer_node(state: PrismState) -> dict:
     else:
         quality_passed = False
 
-    approved = quality_passed
     rewrites = state.get("rewrite_count", 0)
     targets = sorted(set(verdict_targets or _extract_targets(issues)))
+    parse_attempts = state.get("review_parse_attempts", 0)
+    terminated_by_limit = False
+    remaining_issues: list[str] = []
+    next_rewrite_count = rewrites
 
-    # 达到重写上限时强制通过，避免死循环
-    forced = False
-    if not approved and rewrites >= MAX_REWRITES:
-        forced = True
-        approved = True
-        issues.append(f"[global] 已重写 {rewrites} 次达到上限，强制通过")
+    if review_status == "parse_error":
+        parse_attempts += 1
+        if parse_attempts > MAX_REVIEW_PARSE_RETRIES:
+            review_status = "retry_exhausted"
+            terminated_by_limit = True
+            remaining_issues = list(issues)
+    elif quality_passed:
+        parse_attempts = 0
+    elif rewrites >= MAX_REWRITES:
+        review_status = "retry_exhausted"
+        terminated_by_limit = True
+        issues.append(f"[global] 已重写 {rewrites} 次达到上限，转交人工审核")
+        remaining_issues = list(issues)
+    else:
+        next_rewrite_count = rewrites + 1
 
     return {
         "review_issues": issues,
-        "review_approved": approved,
+        # 兼容旧消费者，但不再把“工作流停止”伪装成“质量通过”。
+        "review_approved": quality_passed,
         "quality_passed": quality_passed,
         "review_status": review_status,
-        "remaining_issues": [],
-        "terminated_by_limit": False,
+        "remaining_issues": remaining_issues,
+        "terminated_by_limit": terminated_by_limit,
         "review_parse_error": review_parse_error,
-        "review_parse_attempts": state.get("review_parse_attempts", 0),
+        "review_parse_attempts": parse_attempts,
         "claim_verdicts": claim_verdicts,
         "rewrite_targets": targets,
-        "rewrite_count": rewrites + 1 if not approved and not forced else rewrites,
+        "rewrite_count": next_rewrite_count,
         "trace": [
             {
                 "node": "reviewer",
                 "detail": (
-                    f"approved={approved} issues={len(issues)} "
+                    f"quality_passed={quality_passed} status={review_status} "
+                    f"issues={len(issues)} "
                     f"cited={len(cited)} rewrites={rewrites}"
-                    + (" FORCED" if forced else "")
+                    + (" RETRY_EXHAUSTED" if terminated_by_limit else "")
                     + f" grounded=true context_compacted={str(context_compacted).lower()}"
                     + f" time={time.time() - t0:.1f}s"
                 ),
@@ -216,7 +230,12 @@ def reviewer_node(state: PrismState) -> dict:
 
 
 def route_after_reviewer(state: PrismState) -> str:
-    """条件边：approved → human_review（HITL），否则打回 writer 重写。"""
-    if state.get("review_approved", False):
+    """按质量语义路由，不把停止条件等同于质量通过。"""
+    if state.get("quality_passed", False):
+        return "human_review"
+    status = state.get("review_status", "failed")
+    if status == "parse_error":
+        return "reviewer"
+    if status == "retry_exhausted" or state.get("terminated_by_limit", False):
         return "human_review"
     return "writer"

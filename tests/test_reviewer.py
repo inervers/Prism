@@ -40,6 +40,7 @@ def test_reviewer_parse_error_fails_closed(monkeypatch, base_state):
     assert result["quality_passed"] is False
     assert result["review_status"] == "parse_error"
     assert result["review_parse_error"]
+    assert result["review_parse_attempts"] == 1
 
 
 def test_reviewer_rejects_invalid_citation_without_calling_llm(monkeypatch, base_state):
@@ -55,3 +56,22 @@ def test_reviewer_rejects_invalid_citation_without_calling_llm(monkeypatch, base
     assert result["quality_passed"] is False
     assert result["review_status"] == "failed"
     assert "q1-9" in result["review_issues"][0]
+
+
+def test_rewrite_limit_stops_without_claiming_quality_pass(monkeypatch, base_state):
+    state = base_state()
+    state["report"] = "该结论引用了不存在的证据。[q1-9]"
+    state["rewrite_count"] = reviewer.MAX_REWRITES
+
+    monkeypatch.setattr(
+        reviewer,
+        "build_llm",
+        lambda **_: (_ for _ in ()).throw(AssertionError("LLM should not run")),
+    )
+    result = reviewer.reviewer_node(state)
+
+    assert result["quality_passed"] is False
+    assert result["review_approved"] is False
+    assert result["review_status"] == "retry_exhausted"
+    assert result["terminated_by_limit"] is True
+    assert result["remaining_issues"]
