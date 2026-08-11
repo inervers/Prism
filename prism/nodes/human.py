@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from langgraph.graph import END
 from langgraph.types import interrupt
 
 from prism.llm import build_llm
@@ -79,4 +80,4 @@ def route_after_human(state: PrismState) -> str:
     """HITL 后条件路由：有意见 → revise，否则 END。"""
     if state.get("human_feedback"):
         return "revise"
-    return "end"
+    return END

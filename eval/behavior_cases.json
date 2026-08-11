@@ -40,7 +40,7 @@
     },
     {
       "id": "hitl_approve",
-      "nodeid": "tests/test_checkpoint_resume.py::test_cross_process_interrupt_resume",
+      "nodeid": "tests/test_graph_routes.py::test_hitl_approve_routes_to_langgraph_end",
       "expected_review_status": "passed",
       "expected_terminal": "completed"
     },

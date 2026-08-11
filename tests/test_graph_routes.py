@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from langgraph.graph import END
 
 from prism.nodes.reviewer import route_after_reviewer
 from prism.context import TRUNCATE_SUFFIX, compact_evidence
@@ -58,6 +59,10 @@ def test_no_evidence_short_circuit_is_not_a_quality_pass():
 
 def test_hitl_feedback_routes_to_revision():
     assert route_after_human({"human_feedback": "补充风险说明"}) == "revise"
+
+
+def test_hitl_approve_routes_to_langgraph_end():
+    assert route_after_human({"human_feedback": ""}) == END
 
 
 def test_context_overflow_is_compacted_without_dropping_evidence():
